@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Port Solano — Open-World Crime Game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1420;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #eef1f5; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .panel { background: rgba(10, 16, 26, 0.72); border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px; padding: 8px 12px; }
+  #top-left { position: absolute; top: 14px; left: 14px; display: flex; flex-direction: column; gap: 8px; }
+  #health-row { display: flex; align-items: center; gap: 8px; min-width: 220px; }
+  #health-bar { flex: 1; height: 12px; background: rgba(255,255,255,0.18); border-radius: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #3ad86a; border-radius: 6px; }
+  #money { font-size: 20px; font-weight: 700; color: #7be495; }
+  #stars { font-size: 22px; letter-spacing: 2px; }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; max-width: 46vw; text-align: center; }
+  #message { position: absolute; top: 96px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; max-width: 60vw; text-align: center; transition: opacity 0.4s;
+    background: rgba(10, 16, 26, 0.78); border: 1px solid rgba(255, 210, 58, 0.5);
+    border-radius: 10px; padding: 10px 16px; }
+  #prompt { position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; transition: opacity 0.3s; }
+  #speed { position: absolute; bottom: 18px; right: 210px; font-size: 22px; font-weight: 700; }
+  #minimap-wrap { position: absolute; right: 14px; bottom: 14px; }
+  #minimap { display: block; width: 180px; height: 180px; border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.25); background: #20262e; }
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(8, 12, 20, 0.55); padding: 20px; }
+  .overlay h1 { font-size: 56px; margin: 0 0 6px; letter-spacing: 4px; color: #ffd23a;
+    text-shadow: 0 3px 0 rgba(0,0,0,0.5); }
+  .overlay h2 { font-size: 34px; margin: 0 0 10px; letter-spacing: 3px; }
+  .overlay p { max-width: 560px; font-size: 16px; line-height: 1.5; margin: 6px 0; }
+  .overlay .controls { font-size: 14px; color: #b9c2cc; }
+  .overlay button { pointer-events: auto; margin-top: 16px; padding: 12px 34px; font-size: 18px;
+    font-weight: 700; border: none; border-radius: 10px; cursor: pointer;
+    background: #ffd23a; color: #14100a; }
+  .overlay button:hover { background: #ffe27a; }
+  #continue-btn { display: none; background: #2ad8a8; }
+  #screen-busted h2 { color: #5a9bff; }
+  #screen-wasted h2 { color: #ff5a5a; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Port Solano: an open-world crime game. Explore the city on foot or by car, take jobs from Marta, and stay clear of the police."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="top-left">
+    <div id="health-row" class="panel">
+      <span>❤</span>
+      <div id="health-bar"><div id="health-fill"></div></div>
+      <span id="health-text">100</span>
+    </div>
+    <div id="money" class="panel">$500</div>
+    <div id="stars" class="panel">☆☆☆☆☆</div>
+  </div>
+  <div id="objective" class="panel">Go to Marta’s garage to start your next job.</div>
+  <div id="message"></div>
+  <div id="prompt" class="panel"></div>
+  <div id="speed"></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas></div>
+</div>
+
+<div id="screen-title" class="overlay">
+  <h1>PORT SOLANO</h1>
+  <p>An open-world crime story. Danny Cole is back in town with empty pockets and a fast car to steal. Run jobs for Marta Reyes, dodge the Port Solano police, and make the city yours.</p>
+  <p class="controls">WASD move &nbsp;·&nbsp; Mouse look &nbsp;·&nbsp; E enter / steal car &nbsp;·&nbsp; Click shoot &nbsp;·&nbsp; F punch &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; P pause</p>
+  <button id="start-btn">Start</button>
+  <button id="continue-btn">Continue</button>
+</div>
+
+<div id="screen-pause" class="overlay" style="display:none">
+  <h2>PAUSED</h2>
+  <p>The city waits for you.</p>
+  <button id="resume-btn">Resume</button>
+</div>
+
+<div id="screen-busted" class="overlay" style="display:none">
+  <h2>BUSTED</h2>
+  <p>The Port Solano police caught up with you. You pay a $300 fine and walk out of the station — the city is still yours to take.</p>
+</div>
+
+<div id="screen-wasted" class="overlay" style="display:none">
+  <h2>WASTED</h2>
+  <p>Danny wakes up at the marina clinic, patched up and poorer. Port Solano hasn’t beaten him yet.</p>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
